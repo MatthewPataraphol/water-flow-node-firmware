@@ -1,0 +1,5 @@
+## Non-secret, deliberately nonfunctional fixtures for compiling network code.
+## These are NOT device credentials and are NOT loaded by normal builds.
+CONFIG_FLOW_WIFI_SSID="build-test-network"
+CONFIG_FLOW_WIFI_PASSWORD="build-test-password"
+CONFIG_FLOW_TB_TOKEN="build-test-token"

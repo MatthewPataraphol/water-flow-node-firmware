@@ -1,0 +1,43 @@
+/build*/
+/sdkconfig
+/sdkconfig.old
+/sdkconfig.local*
+/sdkconfig.secrets*
+/sdkconfig.credentials*
+/sdkconfig.*.old
+/managed_components/
+/compile_commands.json
+
+# Local credentials and settings; keep portable environment templates.
+.env
+.env.*
+!.env.example
+!.env.template
+*.local
+*.local.*
+
+# Python environments and caches.
+.venv/
+venv/
+env/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# IDE, editor and operating-system temporary files.
+/.vscode/
+/.idea/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+/flash_test.bin
+# Build/configuration files and firmware binaries can contain credentials.
+*.bin
+*.elf
+*.map
+*.log

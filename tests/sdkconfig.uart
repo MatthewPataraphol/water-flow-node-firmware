@@ -1,0 +1,5 @@
+# Compile the UART path and the unavailable-battery implementation.
+CONFIG_FLOW_SENSOR_UART=y
+CONFIG_FLOW_UART_RX_GPIO=21
+CONFIG_FLOW_UART_TX_GPIO=-1
+# CONFIG_FLOW_BATTERY_MOCK is not set

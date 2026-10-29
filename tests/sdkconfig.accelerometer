@@ -1,0 +1,3 @@
+# Compile the explicit not-implemented sensor boundary.
+CONFIG_FLOW_SENSOR_ACCELEROMETER=y
+# CONFIG_FLOW_BATTERY_MOCK is not set

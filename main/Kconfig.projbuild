@@ -1,0 +1,98 @@
+menu "Water flow node"
+
+config FLOW_WIFI_SSID
+    string "Wi-Fi SSID (local secret configuration)"
+    default ""
+
+config FLOW_WIFI_PASSWORD
+    string "Wi-Fi password (local secret configuration)"
+    default ""
+    help
+        Saved in ignored sdkconfig and compiled into the firmware. Do not
+        copy credentials into sdkconfig.defaults or commit build artifacts.
+
+config FLOW_TB_HOST
+    string "ThingsBoard MQTT hostname (no scheme or path)"
+    default "mqtt.thingsboard.cloud"
+
+config FLOW_TB_PORT
+    int "ThingsBoard MQTT TLS port"
+    range 1 65535
+    default 8883
+
+config FLOW_TB_TOKEN
+    string "ThingsBoard device access token (local secret configuration)"
+    default ""
+
+config FLOW_HEARTBEAT_INTERVAL_S
+    int "Heartbeat interval (seconds)"
+    range 10 86400
+    default 300
+
+config FLOW_NTP_SERVER
+    string "SNTP server"
+    default "pool.ntp.org"
+
+choice FLOW_SENSOR_SOURCE
+    prompt "Sensor source"
+    default FLOW_SENSOR_MOCK
+
+config FLOW_SENSOR_MOCK
+    bool "MOCK: alternate NO_FLOW and FLOW (test data)"
+
+config FLOW_SENSOR_UART
+    bool "UART: temporary FLOW/NO_FLOW line protocol"
+
+config FLOW_SENSOR_ACCELEROMETER
+    bool "SPI accelerometer interface (not implemented)"
+
+endchoice
+
+config FLOW_MOCK_INTERVAL_S
+    int "Mock state interval (seconds)"
+    depends on FLOW_SENSOR_MOCK
+    range 1 86400
+    default 30
+
+config FLOW_UART_RX_GPIO
+    int "UART1 RX GPIO (-1 means unconfigured)"
+    depends on FLOW_SENSOR_UART
+    range -1 39
+    default -1
+    help
+        Select a board-safe exposed pin. GPIO6-11 are flash and GPIO16-17
+        may be occupied by PSRAM on this module. No pin is assumed safe.
+
+config FLOW_UART_TX_GPIO
+    int "UART1 optional TX GPIO (-1 disables TX routing)"
+    depends on FLOW_SENSOR_UART
+    range -1 33
+    default -1
+
+config FLOW_UART_BAUD
+    int "UART baud rate (8N1, no flow control)"
+    depends on FLOW_SENSOR_UART
+    range 1200 921600
+    default 115200
+
+config FLOW_BATTERY_MOCK
+    bool "Use MOCK battery readings"
+    default y if FLOW_SENSOR_MOCK
+    default n
+    help
+        Test values only. With this disabled, battery telemetry is null
+        until the real hardware implementation is provided.
+
+config FLOW_BATTERY_MOCK_MV
+    int "Mock battery voltage (millivolts)"
+    depends on FLOW_BATTERY_MOCK
+    range 0 5000
+    default 3910
+
+config FLOW_BATTERY_MOCK_PERCENT
+    int "Mock battery percentage"
+    depends on FLOW_BATTERY_MOCK
+    range 0 100
+    default 78
+
+endmenu
