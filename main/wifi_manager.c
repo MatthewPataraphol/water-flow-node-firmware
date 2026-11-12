@@ -1,6 +1,5 @@
 #include "wifi_manager.h"
 
-#include <string.h>
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -11,6 +10,7 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 #include "time_sync.h"
+#include "wifi_auth.h"
 
 #define WIFI_READY BIT0
 #define WIFI_CONNECTING BIT1
@@ -85,26 +85,19 @@ esp_err_t wifi_manager_start(void)
     if (!s_events) {
         return ESP_ERR_NO_MEM;
     }
-    size_t ssid_length = strlen(CONFIG_FLOW_WIFI_SSID);
-    size_t password_length = strlen(CONFIG_FLOW_WIFI_PASSWORD);
-    if (ssid_length == 0) {
-        ESP_LOGW(TAG, "Wi-Fi SSID is empty; configure Water flow node in menuconfig");
+    wifi_config_t config;
+    esp_err_t err = wifi_auth_prepare(&config);
+    if (err == ESP_ERR_NOT_FOUND) {
         return ESP_OK;
     }
-    wifi_config_t config = {0};
-    if (ssid_length > sizeof(config.sta.ssid) ||
-        password_length > sizeof(config.sta.password)) {
-        return ESP_ERR_INVALID_ARG;
+    if (err != ESP_OK) {
+        return err;
     }
-    memcpy(config.sta.ssid, CONFIG_FLOW_WIFI_SSID, ssid_length);
-    memcpy(config.sta.password, CONFIG_FLOW_WIFI_PASSWORD, password_length);
-    config.sta.pmf_cfg.capable = true;
-    config.sta.pmf_cfg.required = false;
     if (!esp_netif_create_default_wifi_sta()) {
         return ESP_ERR_NO_MEM;
     }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-    esp_err_t err = esp_wifi_init(&init);
+    err = esp_wifi_init(&init);
     if (err != ESP_OK) {
         return err;
     }
@@ -114,6 +107,7 @@ esp_err_t wifi_manager_start(void)
         (err = esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, wifi_event, NULL)) != ESP_OK ||
         (err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK ||
         (err = esp_wifi_set_config(WIFI_IF_STA, &config)) != ESP_OK ||
+        (err = wifi_auth_apply()) != ESP_OK ||
         (err = esp_wifi_start()) != ESP_OK) {
         return err;
     }

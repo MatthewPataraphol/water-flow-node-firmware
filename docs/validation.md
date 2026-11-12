@@ -91,3 +91,99 @@ hardware testing. See the README for those procedures and known limitations.
 - Adjusted ignored local `sdkconfig` to use the custom partition table and MQTT
   deletion notifications. Build-generated local configurations and outputs are
   ignored. Git repository metadata and the existing flash-test artifact remain.
+
+## Wi-Fi authentication update (November 10, 2026)
+
+Added compile-time selection of WPA/WPA2 Personal or WPA2-Enterprise
+PEAP/MSCHAPv2. Personal remains the default and keeps the existing SSID/password
+symbols. No real campus account credentials are present in source, documentation,
+configuration templates or tests. Build configurations/output remain ignored.
+
+New menuconfig settings under **Water flow node**:
+
+| Symbol | Purpose |
+| --- | --- |
+| `CONFIG_FLOW_WIFI_AUTH_PERSONAL` | Default Personal choice |
+| `CONFIG_FLOW_WIFI_AUTH_ENTERPRISE` | Enterprise choice; enables required SDK supplicant/TLS support |
+| `CONFIG_FLOW_WIFI_ENTERPRISE_USERNAME` | Inner account username; empty default |
+| `CONFIG_FLOW_WIFI_ENTERPRISE_IDENTITY` | Optional outer identity; blank uses username |
+| `CONFIG_FLOW_WIFI_ENTERPRISE_PASSWORD` | Account password; empty default |
+| `CONFIG_FLOW_WIFI_ENTERPRISE_SERVER_NAME` | Optional certificate hostname; empty default |
+
+`CONFIG_FLOW_WIFI_SSID` is shared. `CONFIG_FLOW_WIFI_PASSWORD` is visible in
+Personal mode. Switching modes requires rebuilding/restarting firmware; Kconfig
+can remove hidden mode-specific settings when saving the other mode.
+
+The Enterprise setup uses `esp_eap_client.h` from the explicit `wpa_supplicant`
+component dependency. Exact APIs:
+
+- `esp_eap_client_set_eap_methods(ESP_EAP_TYPE_PEAP)`
+- `esp_eap_client_set_identity()`
+- `esp_eap_client_set_username()`
+- `esp_eap_client_set_password()`
+- `esp_eap_client_use_default_cert_bundle(true)`
+- `esp_eap_client_set_domain_name()` (configured hostname, otherwise `NULL`)
+- `esp_wifi_sta_enterprise_enable()`
+- `esp_wifi_sta_enterprise_disable()` on setup failure to clear partial settings
+
+The installed IDF 5.5.6 supplicant defaults PEAP's inner authentication to
+MSCHAPv2 (`components/wpa_supplicant/src/eap_peer/eap.c`). The TTLS phase-2 API
+is not used to configure PEAP. The station remains `WIFI_MODE_STA`; Enterprise
+sets `WIFI_AUTH_WPA2_ENTERPRISE` as the scan threshold and keeps the PSK/password
+field empty. EAP setup runs after `esp_wifi_set_config()` and before
+`esp_wifi_start()`. Both modes retain `WIFI_STORAGE_RAM`, existing reconnection,
+IP events, RSSI APIs and SNTP startup. The public Wi-Fi API, MQTT, SNTP, flow/NVS,
+heartbeat and mock-sensor implementations are unchanged.
+
+Trust checks use the built-in CA bundle. A configured name adds hostname
+validation; with a blank name only the CA chain is checked. ESP-IDF's hostname
+API is not an Android-style domain-suffix configuration. Obtain the correct
+authentication-server name/trust requirements from network IT. This update
+does not certify a live PAL3.0 connection. No board was flashed or accessed.
+
+`python tests/run_host_tests.py` passed the original **11 pipeline/MQTT groups**
+and **8 authentication profiles**, all compiled with `-Wall -Wextra -Werror`.
+The new tests check Personal behavior and maximum fields, empty/oversize SSIDs,
+Enterprise identity fallback/override, a password longer than the PSK field,
+empty credential rejection, trust API setup, and cleanup after every failing
+EAP setup step. These fakes do not perform an actual EAP/TLS handshake.
+
+Both ESP32 builds completed with exit **0**, `Project build complete.`, and no
+compiler or CMake warnings in their final logs:
+
+| Wi-Fi mode | Application bytes | Application partition free |
+| --- | --- | --- |
+| WPA/WPA2 Personal | 963120 (`0xeb230`) | 54% of 2 MB |
+| WPA2-Enterprise | 998048 (`0xf3aa0`) | 52% of 2 MB |
+
+Inspection of `wifi_auth_apply()` in the Personal ELF confirmed it returns
+`ESP_OK` without EAP calls. The Enterprise ELF includes all eight EAP setup and
+cleanup APIs listed above. Both profiles retain mock sensing and the full
+ThingsBoard TLS implementation; no physical connectivity was tested.
+
+Builds use ESP-IDF 5.5.6, target `esp32`, 8 MB flash, the existing partition
+layout and synthetic compile-only credentials. Host commit-memory pressure
+required sequential builds with `IDF_PY_BUILD_JOBS=1` after parallel attempts
+ran out of host memory. Current local configurations are `sdkconfig.local.wifi-personal`
+and `sdkconfig.local.wifi-enterprise`; the Enterprise fixture defaults are in
+ignored `sdkconfig.local.wifi-enterprise.defaults`. Real local `sdkconfig` is
+not replaced by these validation profiles.
+
+Commands in the exported ESP-IDF shell (PowerShell; the local Enterprise defaults
+file contains synthetic fixtures and is intentionally not in Git):
+
+```powershell
+$env:IDF_PY_BUILD_JOBS = "1"
+idf.py -B build-wifi-personal "-DSDKCONFIG=sdkconfig.local.wifi-personal" "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.ci" "-DIDF_TARGET=esp32" build
+idf.py -B build-wifi-enterprise "-DSDKCONFIG=sdkconfig.local.wifi-enterprise" "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.ci;tests/sdkconfig.enterprise;sdkconfig.local.wifi-enterprise.defaults" "-DIDF_TARGET=esp32" build
+```
+
+Final ignored logs are `build-wifi-personal-validation.log` and
+`build-wifi-enterprise-validation.log`. To configure a real account, use local
+menuconfig as documented in the README, rather than modifying portable fixtures.
+
+Changed files: `main/wifi_auth.c`, `main/wifi_auth.h`, `main/wifi_manager.c`,
+`main/CMakeLists.txt`, `main/Kconfig.projbuild`, `README.md`, `docs/validation.md`,
+`tests/run_host_tests.py`, `tests/host/test_wifi_auth.c`,
+`tests/host/include/esp_wifi.h`, `tests/host/include/esp_eap_client.h`,
+`tests/host/include/wifi_auth_test_config.h`, and `tests/sdkconfig.enterprise`.

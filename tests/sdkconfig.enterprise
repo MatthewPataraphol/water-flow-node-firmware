@@ -1,0 +1,3 @@
+# Mode selection only. Supply synthetic build credentials in ignored local
+# configuration, or real account credentials via local menuconfig for deployment.
+CONFIG_FLOW_WIFI_AUTH_ENTERPRISE=y

@@ -36,6 +36,7 @@ Wi-Fi reconnect task --> IP --> SNTP --> verified TLS MQTT
 | `flow_state.c` | Nonblocking submission, baseline, transition filtering, persistence retry |
 | `event_storage.c` | Mutex-protected NVS queue, state recovery, timestamp resolution, PUBACK removal |
 | `wifi_manager.c` | Wi-Fi station, reconnect attempts every 5 seconds, IP and RSSI |
+| `wifi_auth.c` | Personal or PEAP/MSCHAPv2 Enterprise station configuration and credential setup |
 | `time_sync.c` | SNTP after IP acquisition, validated epoch/monotonic clock anchor |
 | `mqtt_manager.c` | TLS, automatic reconnect, one in-flight event, heartbeat sends |
 | `heartbeat.c` | Health collection every 300 seconds by default |
@@ -74,7 +75,12 @@ Under **Water flow node**, configure:
 
 | Setting | Default / action |
 | --- | --- |
-| Wi-Fi SSID / password | Empty; enter the site's 2.4 GHz credentials locally |
+| Wi-Fi authentication mode | **WPA/WPA2 Personal** by default; select Enterprise for account-based Wi-Fi |
+| Wi-Fi SSID | Empty; enter the selected network's 2.4 GHz SSID locally |
+| Wi-Fi password | Personal mode only; enter the hotspot/home Wi-Fi password locally |
+| Enterprise username / password | Enterprise mode only; empty local account credentials |
+| Enterprise outer identity override | Optional; blank uses the Enterprise username |
+| Enterprise authentication-server certificate hostname | Optional; obtain the matching server hostname from network IT |
 | ThingsBoard hostname | `mqtt.thingsboard.cloud` (hostname only) |
 | ThingsBoard MQTT TLS port | `8883` |
 | ThingsBoard device access token | Empty; enter your device's token locally |
@@ -106,6 +112,60 @@ are ignored. **Never put real credentials in `sdkconfig.defaults`, `sdkconfig.ci
 source, documentation or commits.** Menuconfig stores plaintext secrets locally
 and compiles them into firmware; protect configuration and build artifacts.
 Production provisioning, flash encryption and secure boot remain deployment work.
+
+### Hotspot/home Wi-Fi and Purdue PAL3.0
+
+For a home router or phone hotspot, run `idf.py menuconfig`, open **Water flow
+node -> Wi-Fi authentication mode**, and select **WPA/WPA2 Personal**. Enter
+**Wi-Fi SSID** and **Wi-Fi password**, save, exit and run `idf.py build`.
+The existing symbols `CONFIG_FLOW_WIFI_SSID` and `CONFIG_FLOW_WIFI_PASSWORD` keep
+their meaning. An existing local configuration defaults to Personal mode.
+
+To switch from a hotspot to PAL3.0:
+
+1. Run `idf.py menuconfig` from an exported ESP-IDF 5.5.6 shell.
+2. Open **Water flow node -> Wi-Fi authentication mode** and select
+   **WPA2-Enterprise (PEAP/MSCHAPv2)**.
+3. Set **Wi-Fi SSID** to `PAL3.0`. This remains a shared configurable setting;
+   no Purdue SSID is compiled into source or portable defaults.
+4. Enter your own **Enterprise username** and **Enterprise password** locally.
+   PAL3.0 uses Purdue **Career Account** credentials. Leave **Enterprise outer
+   identity override** empty to use the same username for outer identity and
+   inner authentication, unless network IT specifies otherwise.
+5. Recommended: set **Enterprise authentication-server certificate hostname**
+   to the RADIUS/EAP server hostname confirmed by Purdue IT. ESP-IDF checks the
+   certificate hostname; do not assume an Android domain-suffix value is an
+   exact authentication-server hostname.
+6. Save, exit and run `idf.py build`. Flash manually only when ready. Startup
+   logs `Wi-Fi authentication mode: WPA2-Enterprise`; after IP acquisition the
+   same SNTP, MQTT/TLS, sensing, buffering and heartbeat pipeline continues.
+
+Purdue's [published PAL3.0 configuration guidance](https://kcc.business.purdue.edu/Faq/Item/803)
+specifies PEAP/MSCHAPv2 and Career Account credentials. Confirm current server
+certificate/trust and device-access requirements with Purdue IT; a successful
+firmware build does not establish compatibility with a live campus network.
+The ESP32 requires a 2.4 GHz access point. This implementation supports
+password-based PEAP/MSCHAPv2, rather than client-certificate EAP-TLS.
+
+Enterprise mode always enables the ESP-IDF CA certificate bundle for the EAP
+server chain. A configured server hostname adds name validation; leaving it
+blank checks the CA chain without binding it to the intended authentication
+server, and logs a warning. A private/unbundled CA requires configuring the
+ESP-IDF trust bundle with network IT. EAP certificate date checks follow the
+SDK's TLS configuration; joining Wi-Fi precedes the first SNTP synchronization.
+MQTT still waits for valid SNTP time and verifies its own server certificate.
+No certificate-verification bypass or automatic Personal fallback is added.
+
+To return to phone-hotspot testing, select **WPA/WPA2 Personal**, change the
+SSID back to the hotspot name, re-enter **Wi-Fi password**, save and rebuild.
+Switching modes takes effect after installing/restarting the rebuilt firmware.
+Hidden mode-specific settings may be removed when Kconfig saves the other mode.
+
+**Never commit Career Account credentials**, including outer identities, to
+source, `sdkconfig.defaults`, test profiles, documentation or Git. New Enterprise
+settings are stored in the same ignored local `sdkconfig`; its backups and
+firmware/build output also need protection. Passwords, usernames, identities,
+access tokens and SSIDs are not included in the application's auth-mode logs.
 
 Clean build without deleting existing output:
 
@@ -266,13 +326,18 @@ With Python and a GCC-compatible host compiler:
 python tests/run_host_tests.py
 ```
 
-Tests compile the actual state worker, NVS store, parser and MQTT worker with
-`-Wall -Wextra -Werror` and deterministic FreeRTOS/NVS/MQTT fakes. Eleven groups
+Tests compile the actual state worker, NVS store, parser, MQTT worker and Wi-Fi
+authentication layer with `-Wall -Wextra -Werror` and deterministic API fakes.
+Eleven pipeline/MQTT groups
 cover baseline/deduplication, timestamps, FIFO/full queue, reboot/counters, storage
 failure and checkpoint/deletion power-loss boundaries, unresolved/corrupt records,
 backpressure, parser recovery, reconnect/in-flight handling, publication failure,
 outbox expiry, fast PUBACK, failed acknowledged-event removal, callback overflow,
-and disposable heartbeats. Fakes do not emulate flash GC, real concurrent
+and disposable heartbeats. Eight additional authentication profiles cover Personal
+mode and field limits, empty/oversize SSIDs, Enterprise credentials and identity
+fallback/override, empty credentials and cleanup after each EAP setup failure.
+These use synthetic inputs without any real network/account credentials.
+Fakes do not emulate flash GC, real concurrent
 scheduling, radio, TLS or ThingsBoard. See [validation results](docs/validation.md)
 for exact ESP32 build commands, image sizes and test scope.
 

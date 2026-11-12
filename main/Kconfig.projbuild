@@ -1,15 +1,67 @@
 menu "Water flow node"
 
+choice FLOW_WIFI_AUTH_MODE
+    prompt "Wi-Fi authentication mode"
+    default FLOW_WIFI_AUTH_PERSONAL
+
+config FLOW_WIFI_AUTH_PERSONAL
+    bool "WPA/WPA2 Personal"
+
+config FLOW_WIFI_AUTH_ENTERPRISE
+    bool "WPA2-Enterprise (PEAP/MSCHAPv2)"
+    select ESP_WIFI_ENTERPRISE_SUPPORT
+    select ESP_WIFI_MBEDTLS_CRYPTO
+    select ESP_WIFI_MBEDTLS_TLS_CLIENT
+    select MBEDTLS_CERTIFICATE_BUNDLE
+
+endchoice
+
 config FLOW_WIFI_SSID
     string "Wi-Fi SSID (local secret configuration)"
     default ""
 
 config FLOW_WIFI_PASSWORD
     string "Wi-Fi password (local secret configuration)"
+    depends on FLOW_WIFI_AUTH_PERSONAL
     default ""
     help
         Saved in ignored sdkconfig and compiled into the firmware. Do not
         copy credentials into sdkconfig.defaults or commit build artifacts.
+
+config FLOW_WIFI_ENTERPRISE_USERNAME
+    string "Enterprise username (local secret configuration)"
+    depends on FLOW_WIFI_AUTH_ENTERPRISE
+    default ""
+    help
+        Inner PEAP/MSCHAPv2 username, 1-127 bytes. Also used as the outer
+        identity unless an override is entered below. For PAL3.0 use your
+        Purdue Career Account username. Never commit account credentials.
+
+config FLOW_WIFI_ENTERPRISE_IDENTITY
+    string "Enterprise outer identity override (blank uses username)"
+    depends on FLOW_WIFI_AUTH_ENTERPRISE
+    default ""
+    help
+        Optional outer EAP identity, 1-127 bytes when specified. Leave blank
+        to use the username; other networks may require a separate identity.
+
+config FLOW_WIFI_ENTERPRISE_PASSWORD
+    string "Enterprise password (local secret configuration)"
+    depends on FLOW_WIFI_AUTH_ENTERPRISE
+    default ""
+    help
+        PEAP/MSCHAPv2 account password, not the Personal-mode Wi-Fi password.
+        Saved in ignored sdkconfig and compiled into firmware. Never commit it.
+
+config FLOW_WIFI_ENTERPRISE_SERVER_NAME
+    string "Enterprise authentication-server certificate hostname (optional)"
+    depends on FLOW_WIFI_AUTH_ENTERPRISE
+    default ""
+    help
+        Recommended: the RADIUS/EAP server hostname provided by the network
+        administrator, matching its certificate. This is a hostname check,
+        not an Android-style domain suffix. Empty checks only the CA chain.
+        The ESP-IDF certificate bundle is always used in Enterprise mode.
 
 config FLOW_TB_HOST
     string "ThingsBoard MQTT hostname (no scheme or path)"
