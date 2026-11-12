@@ -112,14 +112,22 @@ config FLOW_UART_RX_GPIO
     range -1 39
     default -1
     help
-        Select a board-safe exposed pin. GPIO6-11 are flash and GPIO16-17
-        may be occupied by PSRAM on this module. No pin is assumed safe.
+        Adafruit ESP32 Feather V2 (ESP32-PICO-V3-02): labeled RX is GPIO7.
+        One-way input: other ESP32 TX -> Feather RX/GPIO7, GND -> GND.
+        The detected PICO-V3-02 allows GPIO7/8 but reserves flash GPIO6/11,
+        PSRAM GPIO9/10, and unavailable/internal GPIO16/17/18/23.
+        Console GPIO1/3 are blocked. Other ESP32 packages retain the generic
+        GPIO6-11 block. RX=-1 remains unconfigured and will not start UART.
 
 config FLOW_UART_TX_GPIO
     int "UART1 optional TX GPIO (-1 disables TX routing)"
     depends on FLOW_SENSOR_UART
     range -1 33
     default -1
+    help
+        Feather V2 labeled TX is GPIO8, available on ESP32-PICO-V3-02.
+        Use -1 for one-way sensor input; use 8 only when TX routing is needed.
+        TX must be output-capable, different from RX, and not reserved.
 
 config FLOW_UART_BAUD
     int "UART baud rate (8N1, no flow control)"

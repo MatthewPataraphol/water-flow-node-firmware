@@ -187,3 +187,60 @@ Changed files: `main/wifi_auth.c`, `main/wifi_auth.h`, `main/wifi_manager.c`,
 `tests/run_host_tests.py`, `tests/host/test_wifi_auth.c`,
 `tests/host/include/esp_wifi.h`, `tests/host/include/esp_eap_client.h`,
 `tests/host/include/wifi_auth_test_config.h`, and `tests/sdkconfig.enterprise`.
+
+## Feather V2 UART pins (November 12, 2026)
+
+Replaced the generic UART GPIO6-11 rejection with package-aware validation in
+`sensor_uart_validate_pins()`. The public SDK `esp_efuse_get_pkg_ver()` accessor
+reads the package ID; no eFuses are written. Only the SDK's
+`EFUSE_RD_CHIP_VER_PKG_ESP32PICOV302` package enables GPIO7/8, matching Feather
+V2's labeled RX/TX. Refer to the linked Adafruit pinout and Espressif PICO
+datasheet in the README for the package-specific wiring.
+
+Validation, before any UART driver configuration or pin routing:
+
+1. RX must pass `GPIO_IS_VALID_GPIO()`.
+2. TX must be `-1`, or pass `GPIO_IS_VALID_OUTPUT_GPIO()` and differ from RX.
+3. GPIO1/3 (console) and GPIO16/17 remain rejected in both directions.
+4. Detected PICO-V3-02 additionally rejects GPIO6/11 (flash), GPIO9/10 (PSRAM),
+   and unavailable/internal GPIO18/23. GPIO16/17/18/23 are not exposed on this
+   package. Protection does not depend on whether the PSRAM driver is enabled.
+5. Other/unknown ESP32 package IDs retain the original GPIO6-11 block, so the
+   GPIO7/8 exception cannot be applied accidentally to a generic ESP32.
+
+All existing host tests passed: **11 state/storage/parser/MQTT groups** and
+**8 Wi-Fi authentication profiles**. All **4 new UART pin-validation groups**
+also passed, compiled against the actual `sensor_uart.c` validator with
+`-std=c11 -Wall -Wextra -Werror`. Tests exercise GPIO7/8 in both directions,
+RX7 with TX disabled, console/flash/PSRAM/unavailable pins, input-only pins,
+invalid/negative/oversize GPIOs, RX/TX overlap and eight other/unknown package IDs.
+GPIO/eFuse API fakes do not test a physical UART signal or the board's eFuses.
+
+The UART compile profile now selects RX GPIO7, TX `-1` and default baud 115200.
+UART1, 8N1, no flow control and exact `FLOW`/`NO_FLOW` newline-delimited parsing
+remain unchanged. Production RX default is still unconfigured (`-1`), and
+default TX is still disabled (`-1`). One-way wiring: other ESP32 TX to Feather
+RX/GPIO7, with GND to GND and Feather TX unconnected. No board was flashed.
+
+The fresh **ESP-IDF 5.5.6 / esp32** UART build completed with exit **0** and
+`Project build complete.` Application size: **983632 bytes (`0xf0250`)**, with
+53% of the 2 MB application partition free. Final build log has no compiler or
+CMake warnings/errors. The selected configuration was UART RX=7, TX=-1,
+baud=115200, 8 MB flash, using synthetic networking credentials in a separate
+ignored local configuration. The real local `sdkconfig` was not modified.
+
+```powershell
+$env:IDF_PY_BUILD_JOBS = "1"
+idf.py -B build-feather-uart "-DSDKCONFIG=sdkconfig.local.feather-uart" "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.ci;tests/sdkconfig.uart" "-DIDF_TARGET=esp32" build
+python tests/run_host_tests.py
+```
+
+Build directory/configuration and `build-feather-uart-validation.log` remain
+ignored. Validation covers compilation and simulated package/GPIO inputs;
+physical UART signaling requires subsequent board testing.
+
+Changed files: `main/sensor_uart.c`, `main/sensor_uart.h`, `main/CMakeLists.txt`,
+`main/Kconfig.projbuild`, `README.md`, `docs/validation.md`, `tests/sdkconfig.uart`,
+`tests/run_host_tests.py`, `tests/host/test_uart_pins.c`,
+`tests/host/include/esp_err.h`, `tests/host/include/driver/gpio.h`,
+`tests/host/include/esp_efuse.h`, and `tests/host/include/soc/efuse_defs.h`.

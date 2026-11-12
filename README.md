@@ -182,8 +182,8 @@ idf.py -B build-network "-DSDKCONFIG=sdkconfig.local.network" "-DSDKCONFIG_DEFAU
 
 For UART/accelerometer compile checks, append `;tests/sdkconfig.uart` or
 `;tests/sdkconfig.accelerometer` to that defaults list, with a distinct build
-directory and local sdkconfig for each. The UART fixture's GPIO21 is a compile-test
-value; verify board wiring before deployment. Normal builds do not load CI fixtures.
+directory and local sdkconfig for each. The UART fixture selects Feather V2 RX
+GPIO7 and disabled TX (`-1`). Normal builds do not load CI fixtures.
 
 ## Flash and monitor (after resolving the separate host issue)
 
@@ -292,12 +292,37 @@ It reports `NO_FLOW` immediately, then alternates states every configured interv
 For a new store, the initial observation is the baseline; the first event follows
 one interval later. Use a separate ThingsBoard test device for synthetic data.
 
-**UART:** select UART and configure a board-safe RX GPIO, optional TX and baud.
-RX defaults to unconfigured (`-1`), so no pin is guessed. UART1 defaults to 115200
-baud, 8N1, no flow control. Flash GPIO6-11, PSRAM GPIO16-17 and console GPIO1/3
-are rejected. Verify the Feather V2 pinout, strapping pins, peripheral conflicts,
-voltage levels and common ground before wiring. The TI electrical interface has
-not been finalized.
+**UART:** select UART and configure RX, optional TX and baud. On the
+[Adafruit ESP32 Feather V2](https://learn.adafruit.com/adafruit-esp32-feather-v2/pinouts),
+the header labeled **RX is GPIO7**, and **TX is GPIO8**. Recommended one-way
+connection with another ESP32 (3.3 V logic):
+
+```text
+Other ESP32 TX  --->  Feather V2 RX / GPIO7
+Other ESP32 GND --->  Feather V2 GND
+```
+
+Leave Feather TX unconnected for this one-way input. In `idf.py menuconfig`, open
+**Water flow node** and set:
+
+- **Sensor source**: `UART: temporary FLOW/NO_FLOW line protocol`
+- **UART1 RX GPIO**: `7` (`CONFIG_FLOW_UART_RX_GPIO=7`)
+- **UART1 optional TX GPIO**: `-1` (`CONFIG_FLOW_UART_TX_GPIO=-1`)
+- **UART baud rate**: `115200` (`CONFIG_FLOW_UART_BAUD=115200`)
+
+UART1, 115200 baud, 8N1 and no flow control remain unchanged. RX still defaults
+to unconfigured (`-1`); TX defaults to disabled (`-1`). If a return path is later
+needed, GPIO8 is the labeled Feather TX pin and may be configured explicitly.
+
+Validation reads the ESP32 package ID and permits GPIO7/8 only on the detected
+**ESP32-PICO-V3-02**. On that package, GPIO6/11 (flash), GPIO9/10 (PSRAM), and
+unavailable/internal GPIO16/17/18/23 remain blocked even with PSRAM software
+disabled. GPIO1/3 remain blocked for the console. Other/unknown ESP32 packages
+retain the conservative GPIO6-11 block and GPIO16/17 protection. See Espressif's
+[PICO series pin mapping, sections 2.2.3 and 2.4](https://www.espressif.com/sites/default/files/documentation/esp32-pico-v3-02_datasheet_en.pdf).
+RX must also pass the ESP-IDF valid-GPIO check; enabled TX must be output-capable
+and different from RX. Verify strapping pins/peripheral conflicts for other pin
+choices. The final TI electrical interface has not been defined.
 
 Temporary protocol: exact, case-sensitive ASCII lines `FLOW` or `NO_FLOW`, each
 terminated with an actual newline byte. CRLF also works. Unknown, binary and
@@ -336,6 +361,9 @@ outbox expiry, fast PUBACK, failed acknowledged-event removal, callback overflow
 and disposable heartbeats. Eight additional authentication profiles cover Personal
 mode and field limits, empty/oversize SSIDs, Enterprise credentials and identity
 fallback/override, empty credentials and cleanup after each EAP setup failure.
+Four UART pin-validation groups additionally check PICO GPIO7/8, protected
+memory/console/unavailable pins, GPIO capability masks, RX/TX overlap and disabled
+TX, and conservative behavior on other/unknown package IDs.
 These use synthetic inputs without any real network/account credentials.
 Fakes do not emulate flash GC, real concurrent
 scheduling, radio, TLS or ThingsBoard. See [validation results](docs/validation.md)

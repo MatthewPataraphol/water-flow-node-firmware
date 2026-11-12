@@ -29,6 +29,8 @@ with tempfile.TemporaryDirectory(prefix="flow-node-tests-") as directory:
     for name, sources in suites.items():
         run_suite(name, sources)
 
+    run_suite("test_uart_pins", ("sensor_uart.c",), ("-DCONFIG_IDF_TARGET_ESP32=1",))
+
     auth_profiles = {
         "personal": (),
         "personal_limits": ("TEST_WIFI_PERSONAL_LIMITS",),
